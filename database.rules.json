@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".read": true,
+        "metadata": {
+          // Room creator becomes host; only host or creator can write metadata
+          ".write": "!data.exists() || data.child('hostUid').val() === auth.uid"
+        },
+        "playback": {
+          // Only room host can change playback state
+          ".write": "root.child('rooms').child($roomId).child('metadata').child('hostUid').val() === auth.uid"
+        },
+        "members": {
+          "$uid": {
+            // Any member can manage their own presence/latency
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        }
+      }
+    },
+    "clockProbes": {
+      "$uid": {
+        // Used for 5-sample NTP ping-pong clock calibration
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}
