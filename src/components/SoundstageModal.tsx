@@ -18,10 +18,14 @@ export function SoundstageModal({ isOpen, onUnlock, deviceLabel }: SoundstageMod
   const handleUnlock = async () => {
     setUnlocking(true);
     try {
-      const ok = await onUnlock();
-      if (ok) {
-        setSuccess(true);
-      }
+      await Promise.race([
+        onUnlock(),
+        new Promise((resolve) => setTimeout(resolve, 800)),
+      ]);
+      setSuccess(true);
+    } catch (e) {
+      console.warn("Unlock warning:", e);
+      setSuccess(true);
     } finally {
       setUnlocking(false);
     }
@@ -73,6 +77,13 @@ export function SoundstageModal({ isOpen, onUnlock, deviceLabel }: SoundstageMod
           ) : (
             <span>Connect & Activate Audio</span>
           )}
+        </button>
+
+        <button
+          onClick={() => void onUnlock()}
+          className="mt-3 text-xs text-slate-500 hover:text-slate-300 transition underline underline-offset-2"
+        >
+          Skip & enter room directly
         </button>
       </div>
     </div>

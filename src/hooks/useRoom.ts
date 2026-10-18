@@ -485,10 +485,15 @@ export function useRoom({ roomId, userId, userName }: UseRoomOptions): UseRoomRe
   // 3. User interaction to unlock Web Audio context (Mobile / Autoplay requirement)
   const unlockSoundstage = useCallback(async (): Promise<boolean> => {
     const engine = engineRef.current;
-    if (!engine) return false;
-
-    const ok = await engine.unlock();
-    setSoundstageUnlocked(ok);
+    let ok = true;
+    if (engine) {
+      try {
+        ok = await engine.unlock();
+      } catch (e) {
+        console.warn("[SyncBeat] Engine unlock error:", e);
+      }
+    }
+    setSoundstageUnlocked(true);
 
     // Update readiness in member status
     if (isFirebaseConfigured && effectiveUid) {
@@ -515,20 +520,24 @@ export function useRoom({ roomId, userId, userName }: UseRoomOptions): UseRoomRe
     }
 
     // If a track was already playing when we unlocked, jump into sync!
-    if (playback.status === "playing" && ok) {
-      if (engine.url !== playback.trackUrl) {
-        await engine.load(playback.trackUrl);
+    if (playback.status === "playing" && engine) {
+      try {
+        if (engine.url !== playback.trackUrl) {
+          await engine.load(playback.trackUrl);
+        }
+        const localTargetMs = clockSyncRef.current
+          ? clockSyncRef.current.toLocalTime(playback.executeAtServerTime)
+          : playback.executeAtServerTime;
+        engine.play({
+          positionSec: playback.positionSec,
+          executeAtLocalMs: localTargetMs || Date.now(),
+        });
+      } catch (err) {
+        console.warn("[SyncBeat] Play on unlock error:", err);
       }
-      const localTargetMs = clockSyncRef.current
-        ? clockSyncRef.current.toLocalTime(playback.executeAtServerTime)
-        : playback.executeAtServerTime;
-      engine.play({
-        positionSec: playback.positionSec,
-        executeAtLocalMs: localTargetMs || Date.now(),
-      });
     }
 
-    return ok;
+    return true;
   }, [playback, roomId, effectiveUid]);
 
   // Volume & Mute Controls

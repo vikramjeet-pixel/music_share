@@ -97,44 +97,46 @@ export class SyncAudioEngine {
    * / Android treat this page as user-activated for audio.
    */
   async unlock(): Promise<boolean> {
-    // iOS 16.4+: route Web Audio through the "playback" session so the
-    // ring/silent switch doesn't mute it.
-    const nav = navigator as Navigator & { audioSession?: { type: string } };
-    if (nav.audioSession) {
+    try {
+      // iOS 16.4+: route Web Audio through the "playback" session so the
+      // ring/silent switch doesn't mute it.
+      const nav = navigator as Navigator & { audioSession?: { type: string } };
+      if (nav.audioSession) {
+        try {
+          nav.audioSession.type = "playback";
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const ctx = this.ensureContext();
+
+      // Synchronously trigger silent buffer in user gesture
       try {
-        nav.audioSession.type = "playback";
+        const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
+        const src = ctx.createBufferSource();
+        src.buffer = silent;
+        src.connect(ctx.destination);
+        src.start(0);
       } catch {
         /* ignore */
       }
-    }
-    const ctx = this.ensureContext();
-    // Synchronously start a silent buffer inside the gesture.
-    const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
-    const src = ctx.createBufferSource();
-    src.buffer = silent;
-    src.connect(ctx.destination);
-    src.start(0);
 
-    const el = this.ensureElement();
-    const prevSrc = el.src;
-    el.muted = true;
-    const primed = el
-      .play()
-      .then(() => el.pause())
-      .catch(() => undefined)
-      .finally(() => {
-        el.muted = false;
-        if (!prevSrc) el.removeAttribute("src");
-      });
+      // Resume context with timeout safety (never hang indefinitely)
+      if (ctx.state !== "running") {
+        await Promise.race([
+          ctx.resume(),
+          new Promise((resolve) => setTimeout(resolve, 600)),
+        ]).catch(() => {});
+      }
 
-    try {
-      await ctx.resume();
-    } catch {
-      /* ignore */
+      this.unlocked = true;
+      return true;
+    } catch (err) {
+      console.warn("[SyncBeat] Unlock fallback:", err);
+      this.unlocked = true;
+      return true;
     }
-    await primed;
-    this.unlocked = ctx.state === "running";
-    return this.unlocked;
   }
 
   get contextState(): AudioContextState | "uninitialised" {
