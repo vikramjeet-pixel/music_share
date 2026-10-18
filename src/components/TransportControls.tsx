@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useRef } from "react";
 import {
   Play,
   Pause,
@@ -10,6 +10,10 @@ import {
   Disc3,
   Clock,
   Sparkles,
+  ExternalLink,
+  Upload,
+  Link2,
+  Music2,
 } from "lucide-react";
 import * as Slider from "@radix-ui/react-slider";
 import { DEMO_TRACKS, findTrackByUrl } from "@/lib/tracks";
@@ -51,10 +55,43 @@ export function TransportControls({
   onVolumeChange,
   onToggleMute,
 }: TransportControlsProps) {
+  const [customUrl, setCustomUrl] = useState("");
+  const [customTitle, setCustomTitle] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const isPlaying = playback.status === "playing";
-  const currentTrack = findTrackByUrl(playback.trackUrl) || DEMO_TRACKS[0];
+  const currentTrack = findTrackByUrl(playback.trackUrl) || {
+    id: "custom",
+    title: playback.trackTitle || "Custom Track",
+    artist: "Selected Audio Source",
+    url: playback.trackUrl,
+    durationSec: durationSec || 60,
+    hue: "from-cyan-500 via-sky-500 to-blue-600",
+  };
   const safeDuration = durationSec > 0 ? durationSec : currentTrack.durationSec || 60;
-  const progressPercent = Math.min(100, (currentPositionSec / safeDuration) * 100);
+
+  // Search query for external apps
+  const searchQuery = encodeURIComponent(
+    `${playback.trackTitle || currentTrack.title} ${currentTrack.artist || ""}`.trim()
+  );
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const objectUrl = URL.createObjectURL(file);
+    const cleanTitle = file.name.replace(/\.[^/.]+$/, "");
+    onSelectTrack(objectUrl, cleanTitle);
+  };
+
+  const handleCustomUrlSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customUrl.trim()) return;
+    const title = customTitle.trim() || "Custom Web Stream";
+    onSelectTrack(customUrl.trim(), title);
+    setCustomUrl("");
+    setCustomTitle("");
+  };
 
   return (
     <div className="bg-slate-900/80 border border-slate-800/90 rounded-3xl p-6 backdrop-blur-2xl shadow-2xl space-y-6">
@@ -145,11 +182,8 @@ export function TransportControls({
               if (isPlaying) onPause();
               else onPlay();
             }}
-            disabled={!isHost}
             className={`w-16 h-16 rounded-full flex items-center justify-center text-white shadow-xl transition-all cursor-pointer ${
-              !isHost
-                ? "bg-slate-800 text-slate-500 opacity-60 cursor-not-allowed"
-                : isPlaying
+              isPlaying
                 ? "bg-gradient-to-tr from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 shadow-orange-500/25 active:scale-95"
                 : "bg-gradient-to-tr from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 shadow-cyan-500/30 active:scale-95"
             }`}
@@ -168,7 +202,7 @@ export function TransportControls({
           )}
         </div>
 
-        {/* Volume & Mute Popover / Slider */}
+        {/* Volume & Mute Slider */}
         <div className="flex items-center gap-2 bg-slate-800/60 p-2 rounded-2xl border border-slate-700/50">
           <button
             onClick={onToggleMute}
@@ -198,12 +232,116 @@ export function TransportControls({
         </div>
       </div>
 
-      {/* Track Selection Carousel (Clickable for Host) */}
-      <div className="pt-2 border-t border-slate-800/70">
+      {/* External Music Apps Quick Launchers (YouTube, Spotify, Apple Music, SoundCloud) */}
+      <div className="pt-3 border-t border-slate-800/70">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+            Open in Music Apps
+          </span>
+          <span className="text-[11px] text-slate-500">Listen externally</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {/* YouTube */}
+          <a
+            href={`https://www.youtube.com/results?search_query=${searchQuery}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-red-950/40 hover:bg-red-900/50 border border-red-800/40 text-red-200 text-xs font-semibold transition"
+          >
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+            YouTube
+          </a>
+
+          {/* Spotify */}
+          <a
+            href={`https://open.spotify.com/search/${searchQuery}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-800/40 text-emerald-200 text-xs font-semibold transition"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Spotify
+          </a>
+
+          {/* Apple Music */}
+          <a
+            href={`https://music.apple.com/search?term=${searchQuery}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-pink-950/40 hover:bg-pink-900/50 border border-pink-800/40 text-pink-200 text-xs font-semibold transition"
+          >
+            <span className="w-2 h-2 rounded-full bg-pink-500" />
+            Apple Music
+          </a>
+
+          {/* SoundCloud */}
+          <a
+            href={`https://soundcloud.com/search?q=${searchQuery}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-orange-950/40 hover:bg-orange-900/50 border border-orange-800/40 text-orange-200 text-xs font-semibold transition"
+          >
+            <span className="w-2 h-2 rounded-full bg-orange-500" />
+            SoundCloud
+          </a>
+        </div>
+      </div>
+
+      {/* Custom Audio Upload & Web Stream URL */}
+      {isHost && (
+        <div className="pt-3 border-t border-slate-800/70">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Upload className="w-3.5 h-3.5 text-sky-400" />
+              Play Your Own Audio File or Stream
+            </span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            {/* Local MP3 File Picker */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="audio/*"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium rounded-xl transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+            >
+              <Music2 className="w-4 h-4 text-cyan-400" />
+              Upload MP3 / Audio File
+            </button>
+
+            {/* Custom URL Input */}
+            <form onSubmit={handleCustomUrlSubmit} className="flex-1 flex gap-2">
+              <input
+                type="url"
+                value={customUrl}
+                onChange={(e) => setCustomUrl(e.target.value)}
+                placeholder="Paste direct MP3 / audio stream URL..."
+                className="flex-1 py-2 px-3 bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none transition"
+              />
+              <button
+                type="submit"
+                className="py-2 px-3 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-xl transition shrink-0 cursor-pointer"
+              >
+                Load Stream
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Preset Demo Tracks Carousel */}
+      <div className="pt-3 border-t border-slate-800/70">
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            Select Track ({DEMO_TRACKS.length})
+            Preset Sync Tracks ({DEMO_TRACKS.length})
           </span>
           {!isHost && (
             <span className="text-[11px] text-slate-500">Host selects track</span>

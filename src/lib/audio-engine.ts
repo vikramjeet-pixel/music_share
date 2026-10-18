@@ -213,6 +213,13 @@ export class SyncAudioEngine {
       this.mode = "element";
       this.duration = await this.loadElement(url);
     }
+
+    if (this.pendingSchedule) {
+      const p = this.pendingSchedule;
+      this.pendingSchedule = null;
+      this.play(p);
+    }
+
     return { mode: this.mode, duration: this.duration };
   }
 
@@ -271,19 +278,48 @@ export class SyncAudioEngine {
 
   /* ---------------------------- transport --------------------------- */
 
+  private pendingSchedule: ScheduleRequest | null = null;
+
   /** Schedule playback so `positionSec` is audible at `executeAtLocalMs`. */
   play(req: ScheduleRequest): void {
-    if (!this.url) return;
+    const ctx = this.ensureContext();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+
     this.schedule = req;
     this.lastStartWall = Math.max(Date.now(), req.executeAtLocalMs);
     this.rate = 1;
-    if (this.mode === "webaudio") this.startBuffer(req);
-    else this.startElement(req);
+
+    // If buffer is still loading, queue it to play as soon as decode finishes
+    if (this.mode === "webaudio") {
+      if (!this.buffer) {
+        this.pendingSchedule = req;
+        // Also fallback to element immediately if buffer takes more than 1s
+        setTimeout(() => {
+          if (this.schedule === req && !this.source && this.url) {
+            console.log("[SyncBeat] Buffer decode taking time, engaging <audio> playback");
+            this.startElement(req);
+          }
+        }, 800);
+        return;
+      }
+      this.startBuffer(req);
+    } else {
+      this.startElement(req);
+    }
   }
 
   private startBuffer(req: ScheduleRequest) {
-    const ctx = this.ctx;
-    if (!ctx || !this.buffer || !this.master) return;
+    const ctx = this.ensureContext();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+
+    if (!this.buffer || !this.master) {
+      if (this.url) this.startElement(req);
+      return;
+    }
     this.fadeOutSource();
 
     const leadIn = 0.02;

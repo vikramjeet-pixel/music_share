@@ -125,6 +125,9 @@ export function useRoom({ roomId, userId, userName }: UseRoomOptions): UseRoomRe
   if (!engineRef.current && typeof window !== "undefined") {
     engineRef.current = new SyncAudioEngine();
     engineRef.current.setVolume(volume);
+    engineRef.current.load(DEFAULT_PLAYBACK.trackUrl).then(({ duration }) => {
+      if (duration > 0) setDurationSec(duration);
+    }).catch(() => {});
   }
 
   // 1. Setup ClockSync & Firebase RTDB or Local Simulation
@@ -554,8 +557,11 @@ export function useRoom({ roomId, userId, userName }: UseRoomOptions): UseRoomRe
     });
   }, []);
 
-  // 4. Host Playback Actions
-  const isHost = metadata?.hostUid === effectiveUid;
+  // 4. Host Playback Actions - creator, matching hostUid, or solo member has host control
+  const isHost =
+    !metadata?.hostUid ||
+    metadata.hostUid === effectiveUid ||
+    Object.keys(members).length <= 1;
 
   const play = useCallback(
     async (trackUrl?: string, trackTitle?: string, startPosition?: number) => {
@@ -564,9 +570,16 @@ export function useRoom({ roomId, userId, userName }: UseRoomOptions): UseRoomRe
       const nowServer = clock ? clock.serverNow() : Date.now();
       const executeAtServerTime = nowServer + BUFFER_WINDOW_MS;
 
-      const targetUrl = trackUrl || playback.trackUrl;
-      const targetTitle = trackTitle || playback.trackTitle;
+      const targetUrl = trackUrl || playback.trackUrl || DEMO_TRACKS[0].url;
+      const targetTitle = trackTitle || playback.trackTitle || DEMO_TRACKS[0].title;
       const pos = typeof startPosition === "number" ? startPosition : currentPositionSec;
+
+      // Ensure engine has targetUrl loaded immediately
+      if (engine && engine.url !== targetUrl) {
+        engine.load(targetUrl).then(({ duration }) => {
+          if (duration > 0) setDurationSec(duration);
+        }).catch(() => {});
+      }
 
       const newPlayback: PlaybackState = {
         status: "playing",
